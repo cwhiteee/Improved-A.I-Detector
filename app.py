@@ -5,15 +5,11 @@ import cv2
 from scipy.stats import entropy
 import matplotlib.pyplot as plt
 
-# Page configuration
-
 st.set_page_config(
 page_title=“Advanced AI Image Detector”,
 page_icon=“🔍”,
 layout=“wide”
 )
-
-# Custom CSS for better UI
 
 st.markdown(”””
 
@@ -59,8 +55,7 @@ def **init**(self):
 self.results = {}
 
 ```
-def analyze_jpeg_compression(self, image):
-    """Analyze JPEG compression artifacts"""
+def analyze_compression(self, image):
     try:
         img_array = np.array(image)
         if len(img_array.shape) == 3:
@@ -68,11 +63,9 @@ def analyze_jpeg_compression(self, image):
         else:
             gray = img_array
             
-        # Apply DCT to detect compression blocks
         dct = cv2.dct(np.float32(gray))
         compression_score = np.std(dct) / (np.mean(np.abs(dct)) + 1e-10)
         
-        # Check for JPEG block artifacts
         h, w = gray.shape
         block_variance = []
         for i in range(0, h-8, 8):
@@ -86,34 +79,25 @@ def analyze_jpeg_compression(self, image):
         else:
             block_uniformity = 0
         
-        return {
-            'compression_score': compression_score,
-            'block_uniformity': block_uniformity,
-            'typical_jpeg': compression_score > 0.1 and block_uniformity < 2.0
-        }
+        return compression_score, block_uniformity
     except Exception:
-        return {'compression_score': 0, 'block_uniformity': 0, 'typical_jpeg': False}
+        return 0, 0
 
-def analyze_noise_patterns(self, image):
-    """Analyze noise patterns and texture"""
+def analyze_noise(self, image):
     img_array = np.array(image.convert('RGB'))
     gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
     
-    # High-frequency noise analysis
     laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
     
-    # Edge detection
     sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
     sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
     sobel_magnitude = np.sqrt(sobelx**2 + sobely**2)
     edge_density = np.mean(sobel_magnitude > 30)
     
-    # Simple texture analysis
     kernel = np.array([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]])
     filtered = cv2.filter2D(gray, -1, kernel)
     texture_variance = np.var(filtered)
     
-    # Color noise analysis
     color_noise = []
     for channel in range(3):
         channel_data = img_array[:, :, channel]
@@ -121,19 +105,11 @@ def analyze_noise_patterns(self, image):
         noise_level = np.std(filtered_channel)
         color_noise.append(noise_level)
     
-    return {
-        'laplacian_variance': laplacian_var,
-        'edge_density': edge_density,
-        'texture_variance': texture_variance,
-        'color_noise_std': np.std(color_noise),
-        'color_noise_mean': np.mean(color_noise)
-    }
+    return laplacian_var, edge_density, texture_variance, np.std(color_noise), np.mean(color_noise)
 
-def analyze_frequency_domain(self, image):
-    """Analyze frequency characteristics"""
+def analyze_frequency(self, image):
     gray = np.array(image.convert('L'))
     
-    # FFT analysis
     fft = np.fft.fft2(gray)
     fft_shifted = np.fft.fftshift(fft)
     magnitude_spectrum = np.abs(fft_shifted)
@@ -141,7 +117,6 @@ def analyze_frequency_domain(self, image):
     h, w = gray.shape
     center_h, center_w = h // 2, w // 2
     
-    # High frequency content
     high_freq_mask = np.zeros((h, w))
     if h > 8 and w > 8:
         high_freq_mask[center_h-h//4:center_h+h//4, center_w-w//4:center_w+w//4] = 1
@@ -151,30 +126,23 @@ def analyze_frequency_domain(self, image):
     else:
         high_freq_ratio = 0.5
     
-    return {
-        'high_freq_ratio': high_freq_ratio,
-        'frequency_variance': np.var(magnitude_spectrum)
-    }
+    return high_freq_ratio, np.var(magnitude_spectrum)
 
-def analyze_color_statistics(self, image):
-    """Analyze color channel statistics"""
+def analyze_colors(self, image):
     img_array = np.array(image.convert('RGB'))
     
     stats = {}
     correlations = []
     
-    # Calculate stats for each channel
     for i, channel in enumerate(['R', 'G', 'B']):
         channel_data = img_array[:, :, i].flatten()
-        stats[f'{channel}_mean'] = np.mean(channel_data)
-        stats[f'{channel}_std'] = np.std(channel_data)
+        stats[channel + '_mean'] = np.mean(channel_data)
+        stats[channel + '_std'] = np.std(channel_data)
         
-        # Entropy
         hist, _ = np.histogram(channel_data, bins=64, range=(0, 255))
         hist = hist / (np.sum(hist) + 1e-10)
-        stats[f'{channel}_entropy'] = entropy(hist + 1e-10)
+        stats[channel + '_entropy'] = entropy(hist + 1e-10)
     
-    # Channel correlations
     for i in range(3):
         for j in range(i+1, 3):
             corr = np.corrcoef(img_array[:, :, i].flatten(), 
@@ -183,14 +151,13 @@ def analyze_color_statistics(self, image):
                 correlations.append(corr)
     
     if len(correlations) > 0:
-        stats['channel_correlation_mean'] = np.mean(correlations)
+        channel_correlation = np.mean(correlations)
     else:
-        stats['channel_correlation_mean'] = 0.5
+        channel_correlation = 0.5
         
-    return stats
+    return stats, channel_correlation
 
-def detect_lighting_consistency(self, image):
-    """Detect lighting inconsistencies"""
+def analyze_lighting(self, image):
     img_array = np.array(image.convert('RGB'))
     gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
     
@@ -198,7 +165,6 @@ def detect_lighting_consistency(self, image):
     grid_size = 8
     brightness_values = []
     
-    # Analyze brightness in grid regions
     for i in range(0, h, h//grid_size):
         for j in range(0, w, w//grid_size):
             region_end_i = min(i + h//grid_size, h)
@@ -212,65 +178,63 @@ def detect_lighting_consistency(self, image):
     else:
         lighting_variance = 0.5
     
-    return {'lighting_variance': lighting_variance}
+    return lighting_variance
 
-def comprehensive_analysis(self, image):
-    """Perform comprehensive AI detection"""
+def full_analysis(self, image):
     try:
-        # Run all analyses
-        jpeg_analysis = self.analyze_jpeg_compression(image)
-        noise_analysis = self.analyze_noise_patterns(image)
-        frequency_analysis = self.analyze_frequency_domain(image)
-        color_analysis = self.analyze_color_statistics(image)
-        lighting_analysis = self.detect_lighting_consistency(image)
+        # Get all metrics
+        compression_score, block_uniformity = self.analyze_compression(image)
+        laplacian_var, edge_density, texture_var, color_noise_std, color_noise_mean = self.analyze_noise(image)
+        high_freq_ratio, freq_variance = self.analyze_frequency(image)
+        color_stats, channel_correlation = self.analyze_colors(image)
+        lighting_variance = self.analyze_lighting(image)
         
         # Combine metrics
         all_metrics = {
-            **jpeg_analysis,
-            **noise_analysis,
-            **frequency_analysis,
-            **color_analysis,
-            **lighting_analysis
+            'compression_score': compression_score,
+            'block_uniformity': block_uniformity,
+            'laplacian_variance': laplacian_var,
+            'edge_density': edge_density,
+            'texture_variance': texture_var,
+            'color_noise_std': color_noise_std,
+            'color_noise_mean': color_noise_mean,
+            'high_freq_ratio': high_freq_ratio,
+            'frequency_variance': freq_variance,
+            'channel_correlation_mean': channel_correlation,
+            'lighting_variance': lighting_variance,
+            **color_stats
         }
         
-        # Calculate AI score with weighted indicators
+        # Calculate AI score
         ai_indicators = 0
         total_weight = 0
         
-        # Texture smoothness (high weight)
-        if all_metrics['laplacian_variance'] < 100:
+        if laplacian_var < 100:
             ai_indicators += 3
         total_weight += 3
         
-        # Low texture variance indicates AI
-        if all_metrics['texture_variance'] < 50:
+        if texture_var < 50:
             ai_indicators += 2
         total_weight += 2
         
-        # High channel correlation indicates AI
-        if all_metrics['channel_correlation_mean'] > 0.8:
+        if channel_correlation > 0.8:
             ai_indicators += 2
         total_weight += 2
         
-        # Low noise indicates AI
-        if all_metrics['color_noise_std'] < 10:
+        if color_noise_std < 10:
             ai_indicators += 2
         total_weight += 2
         
-        # Frequency analysis
-        if all_metrics['high_freq_ratio'] < 0.3:
+        if high_freq_ratio < 0.3:
             ai_indicators += 1
         total_weight += 1
         
-        # Perfect lighting
-        if all_metrics['lighting_variance'] < 0.1:
+        if lighting_variance < 0.1:
             ai_indicators += 1
         total_weight += 1
         
-        # Calculate final score
         ai_score = (ai_indicators / total_weight * 100) if total_weight > 0 else 50
         
-        # Determine classification
         if ai_score >= 70:
             classification = "AI Generated"
             confidence = "High"
@@ -301,8 +265,7 @@ def comprehensive_analysis(self, image):
         return None
 ```
 
-def create_metrics_chart(metrics):
-“”“Create simple metrics visualization”””
+def create_chart(metrics):
 try:
 important_metrics = {
 ‘Texture’: min(metrics[‘laplacian_variance’], 200),
@@ -324,7 +287,6 @@ important_metrics = {
     ax.set_title('Detection Metrics Analysis', fontsize=16, fontweight='bold')
     ax.set_ylabel('Metric Values')
     
-    # Add value labels
     for bar, value in zip(bars, values):
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width()/2., height + 1,
@@ -347,7 +309,6 @@ Upload an image for comprehensive AI detection analysis
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar
 with st.sidebar:
     st.header("🔬 Analysis Methods")
     st.markdown("""
@@ -367,7 +328,6 @@ with st.sidebar:
     - **Real Image (0-39%)**: Likely authentic
     """)
 
-# File uploader
 uploaded_file = st.file_uploader(
     "Choose an image file", 
     type=["jpg", "jpeg", "png"],
@@ -376,7 +336,6 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
     try:
-        # Load image
         image = Image.open(uploaded_file)
         
         col1, col2 = st.columns([1, 1])
@@ -384,7 +343,6 @@ if uploaded_file is not None:
         with col1:
             st.image(image, caption="Uploaded Image", use_column_width=True)
             
-            # Image info
             st.subheader("📋 Image Info")
             st.write(f"**Size:** {image.size[0]} × {image.size[1]} pixels")
             st.write(f"**Format:** {image.format}")
@@ -392,12 +350,10 @@ if uploaded_file is not None:
         
         with col2:
             with st.spinner("🔍 Analyzing image..."):
-                # Perform analysis
                 detector = AdvancedAIDetector()
-                results = detector.comprehensive_analysis(image)
+                results = detector.full_analysis(image)
             
             if results:
-                # Display main result
                 st.markdown(f"""
                 <div class="detection-result {results['css_class']}">
                 {results['emoji']} {results['classification']}<br>
@@ -406,7 +362,6 @@ if uploaded_file is not None:
                 """, unsafe_allow_html=True)
     
         if results:
-            # Key metrics
             st.subheader("📊 Key Metrics")
             metrics = results['detailed_metrics']
             
@@ -424,7 +379,6 @@ if uploaded_file is not None:
             with col4:
                 st.metric("Channel Correlation", f"{metrics['channel_correlation_mean']:.3f}")
             
-            # Detailed analysis
             with st.expander("🔬 Detailed Technical Analysis"):
                 col1, col2 = st.columns(2)
                 
@@ -442,7 +396,6 @@ if uploaded_file is not None:
                     st.write(f"**Block Uniformity:** {metrics['block_uniformity']:.3f}")
                     st.write(f"**Lighting Variance:** {metrics['lighting_variance']:.3f}")
             
-            # Color analysis
             with st.expander("🎨 Color Channel Analysis"):
                 col1, col2, col3 = st.columns(3)
                 
@@ -453,13 +406,11 @@ if uploaded_file is not None:
                         st.write(f"**Std Dev:** {metrics[f'{channel}_std']:.1f}")
                         st.write(f"**Entropy:** {metrics[f'{channel}_entropy']:.3f}")
             
-            # Visualization
             with st.expander("📈 Metrics Visualization"):
-                fig = create_metrics_chart(metrics)
+                fig = create_chart(metrics)
                 if fig:
                     st.pyplot(fig)
             
-            # Interpretation
             with st.expander("❓ How to Interpret Results"):
                 st.markdown("""
                 **🤖 AI-Generated Images usually have:**
